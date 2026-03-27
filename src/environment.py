@@ -24,7 +24,11 @@ class StockTradingEnv(gym.Env):
         initial_amount: float = 1_000_000.0,
         buy_cost_pct: float = 0.001,
         sell_cost_pct: float = 0.001,
+        transaction_cost_pct: float = 0.0,
+        slippage_pct: float = 0.0,
         tech_indicator_list: list[str] | None = None,
+        reward_scaling: float = 1e-4,
+        risk_penalty_coef: float = 0.05,
     ):
         """Initialize the trading environment.
 
@@ -37,7 +41,11 @@ class StockTradingEnv(gym.Env):
             initial_amount: Starting cash balance.
             buy_cost_pct: Transaction cost for buying (fraction).
             sell_cost_pct: Transaction cost for selling (fraction).
+            transaction_cost_pct: Additional proportional transaction fee (fraction).
+            slippage_pct: Slippage cost as fraction of trade amount.
             tech_indicator_list: List of technical indicator column names.
+            reward_scaling: Scale factor for reward normalization.
+            risk_penalty_coef: Coefficient for volatility penalty in reward.
         """
         super().__init__()
 
@@ -47,7 +55,11 @@ class StockTradingEnv(gym.Env):
         self.initial_amount = initial_amount
         self.buy_cost_pct = buy_cost_pct
         self.sell_cost_pct = sell_cost_pct
+        self.transaction_cost_pct = transaction_cost_pct
+        self.slippage_pct = slippage_pct
         self.tech_indicator_list = tech_indicator_list or []
+        self.reward_scaling = reward_scaling
+        self.risk_penalty_coef = risk_penalty_coef
 
         # Number of unique dates (each date has stock_dim rows)
         if stock_dim > 1:
@@ -73,6 +85,8 @@ class StockTradingEnv(gym.Env):
         self.holdings = np.zeros(stock_dim, dtype=np.float64)
         self.portfolio_values = [initial_amount]
         self.trades_count = 0
+        self.total_transaction_costs = 0.0
+        self._recent_returns = []
 
     def _get_prices(self, day_idx: int) -> np.ndarray:
         """Get closing prices for all stocks on a given day."""
@@ -121,6 +135,8 @@ class StockTradingEnv(gym.Env):
         self.holdings = np.zeros(self.stock_dim, dtype=np.float64)
         self.portfolio_values = [self.initial_amount]
         self.trades_count = 0
+        self.total_transaction_costs = 0.0
+        self._recent_returns = []
         return self._get_state(), {}
 
     def step(self, action: np.ndarray):
@@ -141,32 +157,50 @@ class StockTradingEnv(gym.Env):
         sell_indices = np.where(actions < 0)[0]
         buy_indices = np.where(actions > 0)[0]
 
+        # Total cost rate for additional transaction costs and slippage
+        extra_cost_rate = self.transaction_cost_pct + self.slippage_pct
+
         # Execute sells
         for idx in sell_indices:
             sell_qty = min(abs(actions[idx]), int(self.holdings[idx]))
             if sell_qty > 0:
                 sell_amount = sell_qty * prices[idx]
-                self.cash += sell_amount * (1 - self.sell_cost_pct)
+                base_cost = sell_amount * self.sell_cost_pct
+                extra_cost = sell_amount * extra_cost_rate
+                self.cash += sell_amount - base_cost - extra_cost
                 self.holdings[idx] -= sell_qty
                 self.trades_count += 1
+                self.total_transaction_costs += base_cost + extra_cost
 
         # Execute buys
         for idx in buy_indices:
             buy_qty = actions[idx]
-            buy_cost = buy_qty * prices[idx] * (1 + self.buy_cost_pct)
-            # Only buy what we can afford
-            affordable = int(self.cash / (prices[idx] * (1 + self.buy_cost_pct)))
+            total_cost_rate = self.buy_cost_pct + extra_cost_rate
+            affordable = int(self.cash / (prices[idx] * (1 + total_cost_rate)))
             buy_qty = min(buy_qty, affordable)
             if buy_qty > 0:
-                self.cash -= buy_qty * prices[idx] * (1 + self.buy_cost_pct)
+                buy_amount = buy_qty * prices[idx]
+                total_cost = buy_amount * total_cost_rate
+                self.cash -= buy_amount + total_cost
                 self.holdings[idx] += buy_qty
                 self.trades_count += 1
+                self.total_transaction_costs += total_cost
 
         # Advance day
         self.day += 1
         new_value = self._get_portfolio_value()
-        reward = new_value - self.portfolio_values[-1]
+        prev_value = self.portfolio_values[-1]
         self.portfolio_values.append(new_value)
+
+        # Risk-adjusted reward: daily_return - risk_penalty_coef * volatility^2
+        daily_return = (new_value - prev_value) / prev_value if prev_value > 0 else 0.0
+        self._recent_returns.append(daily_return)
+        if len(self._recent_returns) > 1:
+            vol = np.std(self._recent_returns[-20:])  # rolling 20-day vol
+            reward = daily_return - self.risk_penalty_coef * vol ** 2
+        else:
+            reward = daily_return
+        reward = reward / self.reward_scaling if self.reward_scaling != 0 else reward
 
         terminated = self.day >= self.terminal_day
         return self._get_state(), reward, terminated, False, {}

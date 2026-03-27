@@ -15,5 +15,10 @@
 ## Environment & Agent (Cycle 3)
 - PPO hyperparameters use SB3 defaults (lr=3e-4, n_steps=2048, batch_size=64, gamma=0.99). The FinRL paper does not specify exact PPO hyperparameters, so defaults are used as a baseline.
 - `hmax=100` (max shares per action) is a design choice — the paper suggests this as a reasonable limit but optimal values may vary by stock price level.
-- The environment uses a single-step reward (change in portfolio value). The paper also mentions using Sharpe ratio as reward, which could be explored in future cycles.
-- The large max drawdown (-40.39%) is largely attributed to the COVID-19 crash in the test period (March 2020). Walk-forward validation in Phase 4+ may help evaluate robustness outside of this extreme event.
+- The large max drawdown (-40.39%) is largely attributed to the COVID-19 crash in the test period (March 2020). Walk-forward validation helps evaluate robustness outside of this extreme event.
+
+## Transaction Costs (Cycle 5)
+- The FinRL paper uses a flat 0.1% transaction cost. We model this as separate `buy_cost_pct`, `sell_cost_pct`, `transaction_cost_pct`, and `slippage_pct` for more granular analysis.
+- The risk-adjusted reward function uses a fixed `risk_penalty_coef=0.05`. The paper does not specify this parameter; it was chosen empirically. Future cycles could tune this via hyperparameter optimization.
+- The `reward_scaling=1e-4` normalizes rewards for stable PPO training. This is an implementation detail not discussed in the paper.
+- Cost impact on Sharpe ratio is modest (~3% reduction) partly because the PPO agent's trading frequency is moderate (~2700 trades over the test period). Higher-frequency strategies would show larger cost impact.

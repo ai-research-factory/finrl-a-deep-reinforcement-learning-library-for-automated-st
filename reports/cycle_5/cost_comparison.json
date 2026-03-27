@@ -1,0 +1,45 @@
+{
+  "gross_performance": {
+    "sharpeRatio": 0.5057,
+    "annualReturn": 0.1206,
+    "maxDrawdown": -0.4334,
+    "hitRate": 0.5568,
+    "sortinoRatio": 0.4556,
+    "calmarRatio": 0.2782,
+    "totalReturn": 0.2199,
+    "finalPortfolioValue": 1219916.44,
+    "totalTrades": 2717,
+    "totalTransactionCosts": 0.0
+  },
+  "net_performance": {
+    "sharpeRatio": 0.4908,
+    "annualReturn": 0.1149,
+    "maxDrawdown": -0.4344,
+    "hitRate": 0.5523,
+    "sortinoRatio": 0.4443,
+    "calmarRatio": 0.2646,
+    "totalReturn": 0.2092,
+    "finalPortfolioValue": 1209227.4,
+    "totalTrades": 2733,
+    "totalTransactionCosts": 6989.41
+  },
+  "cost_config": {
+    "gross": {
+      "buy_cost_pct": 0.0,
+      "sell_cost_pct": 0.0,
+      "transaction_cost_pct": 0.0,
+      "slippage_pct": 0.0
+    },
+    "net": {
+      "buy_cost_pct": 0.001,
+      "sell_cost_pct": 0.001,
+      "transaction_cost_pct": 0.001,
+      "slippage_pct": 0.0005
+    }
+  },
+  "impact": {
+    "sharpe_reduction": 0.0149,
+    "return_reduction": 0.0057,
+    "drawdown_increase": 0.001
+  }
+}

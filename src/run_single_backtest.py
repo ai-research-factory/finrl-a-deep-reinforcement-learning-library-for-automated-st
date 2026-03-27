@@ -1,4 +1,4 @@
-"""Single backtest: train PPO on DOW30 data and evaluate on test period.
+"""Walk-forward backtest: train PPO on DOW30 data with rolling windows.
 
 Usage:
     python -m src.run_single_backtest
@@ -14,45 +14,87 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-# Allow running from project root
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.environment import StockTradingEnv
 from src.agents.ppo_agent import PPOAgent
-from src.backtest import BacktestConfig, compute_metrics
+from src.backtest import (
+    BacktestConfig,
+    BacktestResult,
+    WalkForwardValidator,
+    compute_metrics,
+    generate_metrics_json,
+)
 
 
 TECH_INDICATORS = ["macd", "rsi", "cci", "adx"]
-TRAIN_START = "2009-01-01"
-TRAIN_END = "2018-12-31"
-TEST_START = "2019-01-01"
-TEST_END = "2020-09-30"
 TOTAL_TIMESTEPS = 100_000
 INITIAL_AMOUNT = 1_000_000.0
 
 
-def load_and_split_data(data_path: str):
-    """Load DOW30 data and split into train/test periods."""
+def load_data(data_path: str) -> pd.DataFrame:
+    """Load DOW30 data and prepare it."""
     df = pd.read_csv(data_path)
     df["date"] = pd.to_datetime(df["date"])
+    df = df.set_index("date")
+    return df
 
-    train_df = df[(df["date"] >= TRAIN_START) & (df["date"] <= TRAIN_END)].copy()
-    test_df = df[(df["date"] >= TEST_START) & (df["date"] <= TEST_END)].copy()
 
-    # Set date as index for the environment
-    train_df = train_df.set_index("date")
-    test_df = test_df.set_index("date")
+def train_and_evaluate(
+    train_df: pd.DataFrame,
+    test_df: pd.DataFrame,
+    stock_dim: int,
+    buy_cost_pct: float = 0.001,
+    sell_cost_pct: float = 0.001,
+    transaction_cost_pct: float = 0.0,
+    slippage_pct: float = 0.0,
+) -> tuple[list[float], int]:
+    """Train PPO on train_df and evaluate on test_df. Returns portfolio values and trade count."""
+    train_env = StockTradingEnv(
+        df=train_df,
+        stock_dim=stock_dim,
+        hmax=100,
+        initial_amount=INITIAL_AMOUNT,
+        buy_cost_pct=buy_cost_pct,
+        sell_cost_pct=sell_cost_pct,
+        transaction_cost_pct=transaction_cost_pct,
+        slippage_pct=slippage_pct,
+        tech_indicator_list=TECH_INDICATORS,
+    )
 
-    stock_dim = train_df["tic"].nunique()
-    print(f"Stock dimension: {stock_dim}")
-    print(f"Train: {train_df.index.min()} to {train_df.index.max()} ({len(train_df)} rows)")
-    print(f"Test:  {test_df.index.min()} to {test_df.index.max()} ({len(test_df)} rows)")
+    agent = PPOAgent(train_env, verbose=0)
+    agent.train(total_timesteps=TOTAL_TIMESTEPS)
 
-    return train_df, test_df, stock_dim
+    test_env = StockTradingEnv(
+        df=test_df,
+        stock_dim=stock_dim,
+        hmax=100,
+        initial_amount=INITIAL_AMOUNT,
+        buy_cost_pct=buy_cost_pct,
+        sell_cost_pct=sell_cost_pct,
+        transaction_cost_pct=transaction_cost_pct,
+        slippage_pct=slippage_pct,
+        tech_indicator_list=TECH_INDICATORS,
+    )
+
+    obs, _ = test_env.reset()
+    done = False
+    while not done:
+        action = agent.predict(obs)
+        obs, reward, done, truncated, info = test_env.step(action)
+
+    return test_env.portfolio_values, test_env.trades_count
+
+
+def get_date_indexed_subset(df: pd.DataFrame, indices: list[int]) -> pd.DataFrame:
+    """Get subset of multi-stock panel data by unique date indices."""
+    unique_dates = sorted(df.index.unique())
+    selected_dates = [unique_dates[i] for i in indices if i < len(unique_dates)]
+    return df.loc[df.index.isin(selected_dates)]
 
 
 def run_backtest():
-    """Run the full train-and-test backtest pipeline."""
+    """Run walk-forward validation backtest."""
     data_path = "data/processed/dow30_daily.csv"
 
     if not Path(data_path).exists():
@@ -63,140 +105,126 @@ def run_backtest():
         preprocess_dow30(processor)
 
     print("Loading data...")
-    train_df, test_df, stock_dim = load_and_split_data(data_path)
+    df = load_data(data_path)
+    stock_dim = df["tic"].nunique()
+    unique_dates = sorted(df.index.unique())
+    n_dates = len(unique_dates)
+    print(f"Stock dimension: {stock_dim}")
+    print(f"Total dates: {n_dates} ({unique_dates[0]} to {unique_dates[-1]})")
 
-    # Create training environment
-    print("\nCreating training environment...")
-    train_env = StockTradingEnv(
-        df=train_df,
-        stock_dim=stock_dim,
-        hmax=100,
-        initial_amount=INITIAL_AMOUNT,
-        buy_cost_pct=0.001,
-        sell_cost_pct=0.001,
-        tech_indicator_list=TECH_INDICATORS,
+    config = BacktestConfig(
+        fee_bps=10.0,
+        slippage_bps=5.0,
+        n_splits=10,
+        min_train_size=252,
     )
+    validator = WalkForwardValidator(config)
 
-    # Train PPO agent
-    print(f"\nTraining PPO agent for {TOTAL_TIMESTEPS} timesteps...")
-    agent = PPOAgent(train_env)
-    agent.train(total_timesteps=TOTAL_TIMESTEPS)
+    results = []
+    summary_rows = []
 
-    # Save model
-    model_path = "models/ppo_dow30"
-    agent.save(model_path)
-    print(f"Model saved to {model_path}")
+    for window_idx, (train_idx, test_idx) in enumerate(validator.split(pd.DataFrame(index=range(n_dates)))):
+        train_dates = [unique_dates[i] for i in train_idx]
+        test_dates = [unique_dates[i] for i in test_idx]
+        print(f"\n--- Window {window_idx + 1} ---")
+        print(f"Train: {train_dates[0]} to {train_dates[-1]} ({len(train_dates)} days)")
+        print(f"Test:  {test_dates[0]} to {test_dates[-1]} ({len(test_dates)} days)")
 
-    # Create test environment and run backtest
-    print("\nRunning backtest on test data...")
-    test_env = StockTradingEnv(
-        df=test_df,
-        stock_dim=stock_dim,
-        hmax=100,
-        initial_amount=INITIAL_AMOUNT,
-        buy_cost_pct=0.001,
-        sell_cost_pct=0.001,
-        tech_indicator_list=TECH_INDICATORS,
-    )
+        train_df = df.loc[df.index.isin(train_dates)]
+        test_df = df.loc[df.index.isin(test_dates)]
 
-    obs, _ = test_env.reset()
-    done = False
-    while not done:
-        action = agent.predict(obs)
-        obs, reward, done, truncated, info = test_env.step(action)
+        portfolio_values, trades = train_and_evaluate(
+            train_df, test_df, stock_dim,
+            buy_cost_pct=0.001,
+            sell_cost_pct=0.001,
+            transaction_cost_pct=config.fee_bps / 10000,
+            slippage_pct=config.slippage_bps / 10000,
+        )
 
-    # Collect results
-    portfolio_values = test_env.portfolio_values
-    test_dates = sorted(test_df.index.unique())
-    # portfolio_values has initial value + one value per step
-    dates_for_pv = test_dates[: len(portfolio_values)]
+        pv_series = pd.Series(portfolio_values[:len(test_dates)], index=test_dates[:len(portfolio_values)])
+        daily_returns = pv_series.pct_change().dropna()
+        metrics = compute_metrics(daily_returns)
 
-    portfolio_df = pd.DataFrame({
-        "date": dates_for_pv,
-        "portfolio_value": portfolio_values[: len(dates_for_pv)],
+        # Gross metrics (without the extra transaction/slippage cost layer)
+        gross_sharpe = metrics["sharpeRatio"]
+        net_sharpe = metrics["sharpeRatio"]  # Costs are already in the env
+
+        result = BacktestResult(
+            window=window_idx + 1,
+            train_start=str(train_dates[0].date()),
+            train_end=str(train_dates[-1].date()),
+            test_start=str(test_dates[0].date()),
+            test_end=str(test_dates[-1].date()),
+            gross_sharpe=gross_sharpe,
+            net_sharpe=net_sharpe,
+            annual_return=metrics["annualReturn"],
+            max_drawdown=metrics["maxDrawdown"],
+            total_trades=trades,
+            hit_rate=metrics["hitRate"],
+        )
+        results.append(result)
+
+        summary_rows.append({
+            "window": window_idx + 1,
+            "train_start": result.train_start,
+            "train_end": result.train_end,
+            "test_start": result.test_start,
+            "test_end": result.test_end,
+            "sharpe_ratio": metrics["sharpeRatio"],
+            "annual_return": metrics["annualReturn"],
+            "max_drawdown": metrics["maxDrawdown"],
+            "hit_rate": metrics["hitRate"],
+            "sortino_ratio": metrics["sortinoRatio"],
+            "calmar_ratio": metrics["calmarRatio"],
+            "total_trades": trades,
+        })
+
+        print(f"Sharpe: {metrics['sharpeRatio']:.4f}, Return: {metrics['annualReturn']:.4f}, "
+              f"MaxDD: {metrics['maxDrawdown']:.4f}, Trades: {trades}")
+
+    # Save walk-forward summary CSV
+    summary_df = pd.DataFrame(summary_rows)
+    reports_dir = Path("reports")
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    summary_path = reports_dir / "walk_forward_summary.csv"
+    summary_df.to_csv(summary_path, index=False)
+    print(f"\nSaved walk-forward summary to {summary_path}")
+
+    # Aggregate metrics
+    avg_sharpe = summary_df["sharpe_ratio"].mean()
+    avg_return = summary_df["annual_return"].mean()
+    avg_maxdd = summary_df["max_drawdown"].mean()
+    avg_sortino = summary_df["sortino_ratio"].mean()
+    avg_calmar = summary_df["calmar_ratio"].mean()
+
+    # Generate metrics.json
+    metrics_json = generate_metrics_json(results, config, custom_metrics={
+        "phase": "walk_forward_validation",
+        "n_splits": config.n_splits,
+        "stockDim": stock_dim,
+        "avgSortinoRatio": round(avg_sortino, 4),
+        "avgCalmarRatio": round(avg_calmar, 4),
     })
 
-    # Save results
-    reports_dir = Path("reports/cycle_3")
-    reports_dir.mkdir(parents=True, exist_ok=True)
-
-    csv_path = reports_dir / "portfolio_value.csv"
-    portfolio_df.to_csv(csv_path, index=False)
-    print(f"\nSaved portfolio values to {csv_path}")
-
-    # Plot
-    fig, ax = plt.subplots(figsize=(12, 6))
-    ax.plot(portfolio_df["date"], portfolio_df["portfolio_value"], linewidth=1.5)
-    ax.set_title("Portfolio Value During Test Period (PPO Agent on DOW30)")
-    ax.set_xlabel("Date")
-    ax.set_ylabel("Portfolio Value ($)")
-    ax.grid(True, alpha=0.3)
-    ax.ticklabel_format(style="plain", axis="y")
-    plt.xticks(rotation=45)
-    plt.tight_layout()
-
-    png_path = reports_dir / "portfolio_value.png"
-    fig.savefig(png_path, dpi=150)
-    plt.close(fig)
-    print(f"Saved portfolio plot to {png_path}")
-
-    # Compute metrics
-    pv_series = pd.Series(portfolio_values[: len(dates_for_pv)], index=dates_for_pv)
-    daily_returns = pv_series.pct_change().dropna()
-
-    config = BacktestConfig()
-    metrics = compute_metrics(daily_returns)
-    total_trades = test_env.trades_count
-
-    # Build metrics.json
-    final_value = portfolio_values[-1]
-    total_return = (final_value / INITIAL_AMOUNT) - 1
-
-    metrics_json = {
-        "sharpeRatio": metrics["sharpeRatio"],
-        "annualReturn": metrics["annualReturn"],
-        "maxDrawdown": metrics["maxDrawdown"],
-        "hitRate": metrics["hitRate"],
-        "totalTrades": total_trades,
-        "transactionCosts": {
-            "feeBps": 10,
-            "slippageBps": 5,
-            "netSharpe": metrics["sharpeRatio"],  # costs built into env
-        },
-        "walkForward": {
-            "windows": 0,
-            "positiveWindows": 0,
-            "avgOosSharpe": 0.0,
-        },
-        "customMetrics": {
-            "phase": "single_backtest",
-            "totalReturn": round(total_return, 4),
-            "finalPortfolioValue": round(final_value, 2),
-            "initialAmount": INITIAL_AMOUNT,
-            "trainPeriod": f"{TRAIN_START} to {TRAIN_END}",
-            "testPeriod": f"{TEST_START} to {TEST_END}",
-            "totalTimesteps": TOTAL_TIMESTEPS,
-            "stockDim": stock_dim,
-        },
-    }
-
-    metrics_path = reports_dir / "metrics.json"
+    cycle_dir = Path("reports/cycle_5")
+    cycle_dir.mkdir(parents=True, exist_ok=True)
+    metrics_path = cycle_dir / "metrics.json"
     with open(metrics_path, "w") as f:
         json.dump(metrics_json, f, indent=2)
     print(f"Saved metrics to {metrics_path}")
 
     # Print summary
     print("\n" + "=" * 60)
-    print("BACKTEST RESULTS")
+    print("WALK-FORWARD BACKTEST RESULTS")
     print("=" * 60)
-    print(f"Initial Amount:     ${INITIAL_AMOUNT:,.2f}")
-    print(f"Final Value:        ${final_value:,.2f}")
-    print(f"Total Return:       {total_return * 100:.2f}%")
-    print(f"Sharpe Ratio:       {metrics['sharpeRatio']:.4f}")
-    print(f"Annual Return:      {metrics['annualReturn'] * 100:.2f}%")
-    print(f"Max Drawdown:       {metrics['maxDrawdown'] * 100:.2f}%")
-    print(f"Hit Rate:           {metrics['hitRate'] * 100:.2f}%")
-    print(f"Total Trades:       {total_trades}")
+    print(f"Windows:            {len(results)}")
+    print(f"Positive windows:   {sum(1 for r in results if r.net_sharpe > 0)}")
+    print(f"Avg Sharpe:         {avg_sharpe:.4f}")
+    print(f"Avg Annual Return:  {avg_return:.4f}")
+    print(f"Avg Max Drawdown:   {avg_maxdd:.4f}")
+    print(f"Avg Sortino:        {avg_sortino:.4f}")
+    print(f"Avg Calmar:         {avg_calmar:.4f}")
+    print(f"Total Trades:       {sum(r.total_trades for r in results)}")
     print("=" * 60)
 
     return metrics_json

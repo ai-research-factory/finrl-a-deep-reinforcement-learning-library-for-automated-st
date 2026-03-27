@@ -119,11 +119,21 @@ def compute_metrics(returns: pd.Series, risk_free_rate: float = 0.0, periods_per
 
     hit_rate = float((returns > 0).sum() / len(returns)) if len(returns) > 0 else 0.0
 
+    # Sortino ratio: uses downside deviation instead of total std
+    downside = returns[returns < 0]
+    downside_std = float(np.sqrt(np.mean(downside**2))) if len(downside) > 0 else 0.0
+    sortino = float(np.sqrt(periods_per_year) * excess.mean() / downside_std) if downside_std > 0 else 0.0
+
+    # Calmar ratio: annual return / abs(max drawdown)
+    calmar = float(annual_return / abs(max_drawdown)) if max_drawdown != 0 else 0.0
+
     return {
         "sharpeRatio": round(sharpe, 4),
         "annualReturn": round(annual_return, 4),
         "maxDrawdown": round(max_drawdown, 4),
         "hitRate": round(hit_rate, 4),
+        "sortinoRatio": round(sortino, 4),
+        "calmarRatio": round(calmar, 4),
     }
 
 

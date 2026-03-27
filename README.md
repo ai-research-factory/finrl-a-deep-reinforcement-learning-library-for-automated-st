@@ -31,32 +31,35 @@ python3 -m src.preprocess --dow30
 
 This downloads 25 DOW30 constituents, adds technical indicators (MACD, RSI, CCI, ADX), aligns dates, and saves to `data/processed/dow30_daily.csv`.
 
-## Running the Backtest (Cycle 3)
+## Running the Backtest
 
+### Walk-Forward Validation
 ```bash
 python3 -m src.run_single_backtest
 ```
 
-This will:
-1. Load `data/processed/dow30_daily.csv` (downloads automatically if missing)
-2. Split into training (2009–2018) and test (2019–2020-09) periods
-3. Train a PPO agent for 100,000 timesteps
-4. Run backtest on the test period
-5. Save results to `reports/cycle_3/`
+Runs PPO training and evaluation using 10-fold walk-forward validation with transaction costs. Outputs `reports/walk_forward_summary.csv` with per-window metrics including Sharpe, Sortino, and Calmar ratios.
 
-### Key Results (Cycle 3)
+### Cost Analysis (Cycle 5)
+```bash
+python3 -m src.run_cost_analysis
+```
 
-| Metric | Value |
-|--------|-------|
-| Sharpe Ratio | 0.26 |
-| Annualized Return | 3.23% |
-| Max Drawdown | -40.39% |
-| Total Return (test period) | 5.70% |
+Trains a single PPO agent and evaluates it under two cost configurations (gross: 0% costs, net: 0.1% fee + 0.05% slippage) to measure the impact of transaction costs on performance. Outputs `reports/cycle_5/cost_comparison.json`.
+
+### Key Results (Cycle 5 - Cost Analysis)
+
+| Metric | Gross | Net (with costs) |
+|--------|-------|------------------|
+| Sharpe Ratio | 0.51 | 0.49 |
+| Annual Return | 12.06% | 11.49% |
+| Max Drawdown | -43.34% | -43.44% |
+| Transaction Costs | $0 | $6,989 |
 
 ## Reports
 
 Each cycle produces:
 - `reports/cycle_N/metrics.json` — Structured metrics
 - `reports/cycle_N/technical_findings.md` — Technical summary
-- `reports/cycle_3/portfolio_value.csv` — Daily portfolio values
-- `reports/cycle_3/portfolio_value.png` — Portfolio value chart
+- `reports/walk_forward_summary.csv` — Walk-forward validation results
+- `reports/cycle_5/cost_comparison.json` — Gross vs. net performance comparison

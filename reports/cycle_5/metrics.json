@@ -1,0 +1,35 @@
+{
+  "sharpeRatio": 0.5057,
+  "annualReturn": 0.1206,
+  "maxDrawdown": -0.4334,
+  "hitRate": 0.5568,
+  "totalTrades": 2717,
+  "transactionCosts": {
+    "feeBps": 10,
+    "slippageBps": 5,
+    "netSharpe": 0.4908
+  },
+  "walkForward": {
+    "windows": 0,
+    "positiveWindows": 0,
+    "avgOosSharpe": 0.0
+  },
+  "customMetrics": {
+    "phase": "cost_analysis",
+    "grossSharpe": 0.5057,
+    "netSharpe": 0.4908,
+    "sharpeReduction": 0.0149,
+    "grossAnnualReturn": 0.1206,
+    "netAnnualReturn": 0.1149,
+    "grossMaxDrawdown": -0.4334,
+    "netMaxDrawdown": -0.4344,
+    "totalTransactionCosts": 6989.41,
+    "sortinoRatio": 0.4556,
+    "calmarRatio": 0.2782,
+    "netSortinoRatio": 0.4443,
+    "netCalmarRatio": 0.2646,
+    "stockDim": 25,
+    "trainPeriod": "2009-01-01 to 2018-12-31",
+    "testPeriod": "2019-01-01 to 2020-09-30"
+  }
+}
