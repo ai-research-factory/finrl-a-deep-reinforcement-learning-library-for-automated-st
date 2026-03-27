@@ -7,7 +7,7 @@ proj_592c901a
 ReinforcementLearning
 
 ## Current Cycle
-3
+5
 
 ## Objective
 Implement, validate, and iteratively improve the paper's approach with production-quality standards.
@@ -67,74 +67,33 @@ df = df.set_index("timestamp")
 
 
 
-## ★ 今回のタスク (Cycle 3)
+## ★ 今回のタスク (Cycle 5)
 
 
-### Phase 3: 統合とシングルバックテスト
+### Phase 5: 取引コストモデルの導入
 
-**ゴール**: 実データ、環境、エージェントを統合し、単一の学習・テスト期間でバックテストを実行する。
+**ゴール**: 取引環境に手数料とスリッページをモデル化し、コストがパフォーマンスに与える影響を評価する。
 
 **具体的な作業指示**:
-1. `src/environment.py`の`StockTradingEnv`を修正し、コンストラクタでデータフレームを受け取れるようにします。
-2. `scripts/run_single_backtest.py`を作成します。このスクリプトは`data/processed/dow30_daily.csv`を読み込み、学習期間（2009-01-01〜2018-12-31）とテスト期間（2019-01-01〜2020-09-30）に分割します。
-3. 学習データで`StockTradingEnv`を初期化し、PPOエージェントを100,000タイムステップ学習させます。
-4. 学習済みエージェントを使い、テストデータで初期化した環境でバックテストを実行します。各ステップのポートフォリオ価値を記録します。
-5. 結果として得られたポートフォリオ価値の時系列データを`reports/cycle_3/portfolio_value.csv`に保存し、その推移を`reports/cycle_3/portfolio_value.png`としてプロットします。
+1. `src/environment.py`の`StockTradingEnv`の`__init__`に`transaction_cost_pct`と`slippage_pct`を引数として追加します。
+2. `step`メソッド内で、売買アクションが実行された際に、取引額に応じた手数料とスリッページを計算し、ポートフォリオの現金残高から差し引くロジックを追加します。
+3. `scripts/run_single_backtest.py`をコピーして`scripts/run_cost_analysis.py`を作成します。このスクリプトで、コストなし（0%）とコストあり（手数料0.1%、スリッページ0.05%）の両方の設定でバックテストを実行します。
+4. 両方の設定でのパフォーマンス指標を比較し、`reports/cycle_5/cost_comparison.json`に保存します。
 
 **期待される出力ファイル**:
-- reports/cycle_3/portfolio_value.csv
-- reports/cycle_3/portfolio_value.png
+- reports/cycle_5/cost_comparison.json
 
 **受入基準 (これを全て満たすまで完了としない)**:
-- `portfolio_value.csv`にテスト期間中の日々のポートフォリオ価値が記録されている。
-- `portfolio_value.png`にポートフォリオ価値の推移が描画されている。
+- `cost_comparison.json`が生成され、'gross_performance'と'net_performance'のキーが含まれている。
+- ネットパフォーマンスのシャープレシオがグロスパフォーマンスのシャープレシオよりも低い。
 
 
 
 
 
 ## スコア推移
-Cycle 2: 45%
+Cycle 2: 45% → Cycle 4: 50%
 
-
-
-## 前回の結果
-# Cycle 2: Technical Findings — Real Data Pipeline
-
-## Implementation
-
-### DataProcessor (`src/data/processor.py`)
-- `download_data(tickers, start_date, end_date)`: Fetches OHLCV data from the ARF Data API (`period=max`, filtered to requested date range). Saves raw CSV to `data/raw/{ticker}.csv`.
-- `add_technical_indicators(df)`: Adds four technical indicators using the `ta` library:
-  - **MACD** (default 12/26/9 windows)
-  - **RSI** (14-day)
-  - **CCI** (14-day)
-  - **ADX** (14-day)
-
-### Preprocess Script (`src/preprocess.py`)
-Orchestrates the full pipeline: download AAPL data (2009-01-01 to 2021-12-31), add indicators, forward-fill NaN values, drop remaining leading NaN rows, save to `data/processed/AAPL_processed.csv`.
-
-## Results
-
-| Metric | Value |
-|--------|-------|
-| Rows (processed) | 3,248 |
-| Date range | 2009-02-09 to 2021-12-31 |
-| Columns | open, high, low, close, volume, macd, rsi, cci, adx |
-| NaN values | 0 |
-
-- 25 leading rows were dropped after forward-fill (from initial indicator warm-up windows), resulting in an effective start date of 2009-02-09 instead of 2009-01-02.
-- The `ta` library's ADX indicator requires ~14 days of warm-up, which accounts for most of the dropped rows.
-
-## Observations
-
-- ARF Data API provides `period=max` option which covers the full history needed (2009–2021).
-- Data quality appears good with no missing OHLCV values in the raw download.
-- Forward-fill strategy is appropriate since NaN values only appear in the initial rows where indicators lack sufficient history.
-
-## Dependencies Added
-- `ta` — Technical analysis library for computing indicators
-- `requests` — HTTP client for ARF Data API calls
 
 
 
@@ -145,18 +104,18 @@ Orchestrates the full pipeline: download AAPL data (2009-01-01 to 2021-12-31), a
 2. [object Object]
 3. [object Object]
 ### マネージャー指示 (次のアクション)
-1. 【最優先】`src/environment/stock_trading_env.py` を作成し、OpenAI Gymの`gym.Env`を継承した取引環境を実装する。`step`, `reset`メソッドを定義し、状態空間（state space）、行動空間（action space）、報酬（reward）の設計を論文に沿って行う。まずは単一銘柄（AAPL）で動作する基本環境を完成させること。
-2. 【重要】`src/agents/a2c_agent.py` を作成し、Stable-Baselines3ライブラリを用いて論文で言及されているベースラインの一つであるA2Cエージェントを実装する。`train`と`predict`メソッドを定義し、`src/environment/stock_trading_env.py`で作成した環境と連携して学習と推論が実行できることを確認する。
-3. 【推奨】`src/data/processor.py`の`DataProcessor`クラスを修正し、単一銘柄だけでなく、複数のティッカーシンボル（DJIA構成銘柄リスト）を引数として受け取り、一括でデータ処理できるように拡張する。同時に、論文で言及されているVIXとturbulence indexを計算し、特徴量として追加するロジックを実装する。
+1. 【最優先】`src/run_single_backtest.py`を修正し、単一期間でのバックテストを廃止する。代わりに`src/backtest.py`に実装済みの`WalkForwardValidator`を呼び出し、最低10分割（n_splits=10）でのウォークフォワード検証を実行する。各foldの性能と集計結果（平均Sharpe、平均MaxDD、OOS全体の累積リターン等）を`reports/walk_forward_summary.csv`に出力すること。
+2. 【重要】`src/environment.py`の`step`メソッドにおける報酬関数を修正し、リスクペナルティを導入する。具体的には、現在の`reward = self.state[0]`（ポートフォリオ価値の変化）に、シャープレシオやSortinoレシオを最大化するような項（例: `reward = daily_return - 0.05 * daily_volatility**2`）を追加し、エージェントがリスク調整後リターンを学習するように促す。変更前後の報酬設計と思考プロセスを`docs/reward_function_design.md`に記録すること。
+3. 【推奨】`src/backtest.py`の評価レポート生成部分を拡張し、Calmarレシオ（リターン/最大ドローダウン）とSortinoレシオを計算・出力する機能を追加する。これにより、下落リスクをより詳細に評価できるようにする。これらの指標も`reports/walk_forward_summary.csv`に含めること。
 
 
 ## 全体Phase計画 (参考)
 
 ✓ Phase 1: コア環境とエージェントの実装 — 合成データ上で動作する、基本的な株式取引環境とPPOエージェントを実装する。
 ✓ Phase 2: 実データパイプラインの構築 — yfinanceからDOW30の株価データを取得し、テクニカル指標を追加して前処理を行うパイプラインを構築する。
-→ Phase 3: 統合とシングルバックテスト — 実データ、環境、エージェントを統合し、単一の学習・テスト期間でバックテストを実行する。
-  Phase 4: 評価指標とベースライン比較 — 標準的な財務評価指標を計算するモジュールを実装し、エージェントの性能をベースライン戦略と比較する。
-  Phase 5: 取引コストモデルの導入 — 取引環境に手数料とスリッページをモデル化し、コストがパフォーマンスに与える影響を評価する。
+✓ Phase 3: 統合とシングルバックテスト — 実データ、環境、エージェントを統合し、単一の学習・テスト期間でバックテストを実行する。
+✓ Phase 4: 評価指標とベースライン比較 — 標準的な財務評価指標を計算するモジュールを実装し、エージェントの性能をベースライン戦略と比較する。
+→ Phase 5: 取引コストモデルの導入 — 取引環境に手数料とスリッページをモデル化し、コストがパフォーマンスに与える影響を評価する。
   Phase 6: ウォークフォワード検証の実装 — 単一の学習・テスト分割ではなく、より頑健なウォークフォワード検証フレームワークを実装する。
   Phase 7: ハイパーパラメータ最適化 — Optunaを用いてPPOエージェントの主要なハイパーパラメータを体系的に探索し、最適な組み合わせを見つける。
   Phase 8: 最適化パラメータでの再評価 — 見つかった最適なハイパーパラメータを使用して、完全なウォークフォワード検証を再実行し、パフォーマンスの向上を確認する。
@@ -212,8 +171,8 @@ Orchestrates the full pipeline: download AAPL data (2009-01-01 to 2021-12-31), a
 
 ## 出力ファイル
 以下のファイルを保存してから完了すること:
-- `reports/cycle_3/metrics.json` — 下記スキーマに従う（必須）
-- `reports/cycle_3/technical_findings.md` — 実装内容、結果、観察事項
+- `reports/cycle_5/metrics.json` — 下記スキーマに従う（必須）
+- `reports/cycle_5/technical_findings.md` — 実装内容、結果、観察事項
 
 ### metrics.json 必須スキーマ
 ```json
