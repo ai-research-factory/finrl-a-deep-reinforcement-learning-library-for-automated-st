@@ -7,7 +7,7 @@ proj_592c901a
 ReinforcementLearning
 
 ## Current Cycle
-5
+7
 
 ## Objective
 Implement, validate, and iteratively improve the paper's approach with production-quality standards.
@@ -67,32 +67,35 @@ df = df.set_index("timestamp")
 
 
 
-## ★ 今回のタスク (Cycle 5)
+## ★ 今回のタスク (Cycle 7)
 
 
-### Phase 5: 取引コストモデルの導入
+### Phase 7: ハイパーパラメータ最適化
 
-**ゴール**: 取引環境に手数料とスリッページをモデル化し、コストがパフォーマンスに与える影響を評価する。
+**ゴール**: Optunaを用いてPPOエージェントの主要なハイパーパラメータを体系的に探索し、最適な組み合わせを見つける。
 
 **具体的な作業指示**:
-1. `src/environment.py`の`StockTradingEnv`の`__init__`に`transaction_cost_pct`と`slippage_pct`を引数として追加します。
-2. `step`メソッド内で、売買アクションが実行された際に、取引額に応じた手数料とスリッページを計算し、ポートフォリオの現金残高から差し引くロジックを追加します。
-3. `scripts/run_single_backtest.py`をコピーして`scripts/run_cost_analysis.py`を作成します。このスクリプトで、コストなし（0%）とコストあり（手数料0.1%、スリッページ0.05%）の両方の設定でバックテストを実行します。
-4. 両方の設定でのパフォーマンス指標を比較し、`reports/cycle_5/cost_comparison.json`に保存します。
+1. `scripts/tune_hyperparameters.py`を新規作成します。
+2. `Optuna`ライブラリを使い、最適化スタディを作成します。目的関数は、ウォークフォワードの最初のfold（学習データで学習し、検証データで評価）のシャープレシオを最大化することとします。
+3. 探索するハイパーパラメータは、`learning_rate` (1e-5 to 1e-3)、`n_steps` (2048, 4096)、`gamma` (0.99, 0.995, 0.999)、`ent_coef` (0.0, 0.01)とします。
+4. 最適化を100試行実行し、見つかった最適なパラメータを`reports/cycle_7/best_params.json`に保存します。Optunaのスタディ結果も`reports/cycle_7/study.db`に保存します。
 
 **期待される出力ファイル**:
-- reports/cycle_5/cost_comparison.json
+- scripts/tune_hyperparameters.py
+- reports/cycle_7/best_params.json
+- reports/cycle_7/study.db
 
 **受入基準 (これを全て満たすまで完了としない)**:
-- `cost_comparison.json`が生成され、'gross_performance'と'net_performance'のキーが含まれている。
-- ネットパフォーマンスのシャープレシオがグロスパフォーマンスのシャープレシオよりも低い。
+- `best_params.json`が生成され、最適化された`learning_rate`などの値が含まれている。
+- `study.db`が生成されている。
 
 
 
 
 
 ## スコア推移
-Cycle 2: 45% → Cycle 4: 50%
+Cycle 2: 45% → Cycle 4: 50% → Cycle 6: 45%
+改善速度: 0.0%/cycle ⚠ 停滞気味 — アプローチの転換を検討
 
 
 
@@ -100,13 +103,13 @@ Cycle 2: 45% → Cycle 4: 50%
 
 ## レビューからのフィードバック
 ### レビュー改善指示
-1. [object Object]
-2. [object Object]
-3. [object Object]
+1. 【最重要】Walk-forward検証をプロジェクトの唯一の公式な評価手法として確立すること。具体的には、(1) `src/run_single_backtest.py` を `src/run_walk_forward.py` にリネームする。 (2) このスクリプトをデフォルトの実行パスとし、Walk-forwardの各OOS期間の結果を集計したサマリー（`reports/walk_forward_summary.csv`）を生成する。 (3) 次のサイクルの `reports/cycle_N/metrics.json` は、このWalk-forward結果の**平均値と標準偏差**（例: `avgOosSharpe`, `stdOosSharpe`）を主要メトリクスとして報告するように `generate_metrics_json` 関数を修正し、`walkForward`セクション（`windows`, `positiveWindows`等）を正しく埋めること。
+2. 【重要】ベースライン戦略を実装し、比較評価を行うこと。`src/backtest.py` に、期間開始時に均等配分で購入し最後まで保持する「バイアンドホールド戦略」と、定期的に均等ウェイトにリバランスする「均等配分戦略」のバックテストロジックを追加する。`src/run_walk_forward.py` の中で、これらのベースライン戦略も同じWalk-forwardの枠組みで評価し、結果をPPOエージェントと比較する表を `reports/cycle_N/technical_findings.md` に必ず含めること。
+3. 【推奨】論文忠実度と独自改善を明確に分離すること。リワード関数の変更 (`risk_penalty_coef`) は論文からの逸脱である。まず、論文で提示されているリワード関数（ポートフォリオ価値の変化）に戻した状態でWalk-forward検証を実行し、論文再現のベースライン性能を確定させる。その上で、リスク調整後リワード関数を使った場合の結果を「改善実験」として別途報告し、その効果を比較分析するドキュメント（例: `docs/reward_function_ablation.md`）を作成すること。
 ### マネージャー指示 (次のアクション)
-1. 【最優先】`src/run_single_backtest.py`を修正し、単一期間でのバックテストを廃止する。代わりに`src/backtest.py`に実装済みの`WalkForwardValidator`を呼び出し、最低10分割（n_splits=10）でのウォークフォワード検証を実行する。各foldの性能と集計結果（平均Sharpe、平均MaxDD、OOS全体の累積リターン等）を`reports/walk_forward_summary.csv`に出力すること。
-2. 【重要】`src/environment.py`の`step`メソッドにおける報酬関数を修正し、リスクペナルティを導入する。具体的には、現在の`reward = self.state[0]`（ポートフォリオ価値の変化）に、シャープレシオやSortinoレシオを最大化するような項（例: `reward = daily_return - 0.05 * daily_volatility**2`）を追加し、エージェントがリスク調整後リターンを学習するように促す。変更前後の報酬設計と思考プロセスを`docs/reward_function_design.md`に記録すること。
-3. 【推奨】`src/backtest.py`の評価レポート生成部分を拡張し、Calmarレシオ（リターン/最大ドローダウン）とSortinoレシオを計算・出力する機能を追加する。これにより、下落リスクをより詳細に評価できるようにする。これらの指標も`reports/walk_forward_summary.csv`に含めること。
+1. 【最優先】Walk-forward検証の完全な実行と報告: `run_cost_analysis.py`の使用を中止し、`src/run_single_backtest.py`に実装済みのWalk-forward検証を公式な評価手法として採用する。`config/backtest_dow_30.yml`等の設定ファイルで`n_windows`を10以上に設定してバックテストを再実行し、`reports/cycle_7/metrics.json`の`walkForward`セクションに結果が正しく記録されることを必須とする。
+2. 【重要】ベースライン戦略の導入と比較: `src/baselines.py`を新規作成し、「Buy and Hold」戦略と「均等配分ポートフォリオ（月次リバランス）」戦略を実装する。これらのベースライン戦略もPPOエージェントと同一のWalk-forward検証フレームワーク (`src/run_single_backtest.py`を使用) で評価し、Sharpeレシオ、年間リターン、最大ドローダウンをまとめた比較表を`reports/cycle_7/performance_comparison.md`として生成する。
+3. 【推奨】Walk-forward結果の安定性分析: Walk-forwardの各検証ウィンドウにおけるSharpeレシオの分布（平均、標準偏差、最小値、最大値）を計算し、`reports/cycle_7/metrics.json`に追記する。さらに、この分布をヒストグラムとして`reports/cycle_7/sharpe_distribution.png`に出力し、戦略性能が特定の期間に過度に依存していないか（安定しているか）を評価する。
 
 
 ## 全体Phase計画 (参考)
@@ -115,9 +118,9 @@ Cycle 2: 45% → Cycle 4: 50%
 ✓ Phase 2: 実データパイプラインの構築 — yfinanceからDOW30の株価データを取得し、テクニカル指標を追加して前処理を行うパイプラインを構築する。
 ✓ Phase 3: 統合とシングルバックテスト — 実データ、環境、エージェントを統合し、単一の学習・テスト期間でバックテストを実行する。
 ✓ Phase 4: 評価指標とベースライン比較 — 標準的な財務評価指標を計算するモジュールを実装し、エージェントの性能をベースライン戦略と比較する。
-→ Phase 5: 取引コストモデルの導入 — 取引環境に手数料とスリッページをモデル化し、コストがパフォーマンスに与える影響を評価する。
-  Phase 6: ウォークフォワード検証の実装 — 単一の学習・テスト分割ではなく、より頑健なウォークフォワード検証フレームワークを実装する。
-  Phase 7: ハイパーパラメータ最適化 — Optunaを用いてPPOエージェントの主要なハイパーパラメータを体系的に探索し、最適な組み合わせを見つける。
+✓ Phase 5: 取引コストモデルの導入 — 取引環境に手数料とスリッページをモデル化し、コストがパフォーマンスに与える影響を評価する。
+✓ Phase 6: ウォークフォワード検証の実装 — 単一の学習・テスト分割ではなく、より頑健なウォークフォワード検証フレームワークを実装する。
+→ Phase 7: ハイパーパラメータ最適化 — Optunaを用いてPPOエージェントの主要なハイパーパラメータを体系的に探索し、最適な組み合わせを見つける。
   Phase 8: 最適化パラメータでの再評価 — 見つかった最適なハイパーパラメータを使用して、完全なウォークフォワード検証を再実行し、パフォーマンスの向上を確認する。
   Phase 9: 代替DRLアルゴリズムとの比較 — 別のDRLアルゴリズム（A2C）を実装し、PPOとの性能をウォークフォワード検証で比較する。
   Phase 10: 状態空間の拡張と影響分析 — マクロ経済指標を状態空間に追加し、それがエージェントのパフォーマンスに与える影響を分析する。
@@ -171,8 +174,8 @@ Cycle 2: 45% → Cycle 4: 50%
 
 ## 出力ファイル
 以下のファイルを保存してから完了すること:
-- `reports/cycle_5/metrics.json` — 下記スキーマに従う（必須）
-- `reports/cycle_5/technical_findings.md` — 実装内容、結果、観察事項
+- `reports/cycle_7/metrics.json` — 下記スキーマに従う（必須）
+- `reports/cycle_7/technical_findings.md` — 実装内容、結果、観察事項
 
 ### metrics.json 必須スキーマ
 ```json
