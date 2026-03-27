@@ -11,7 +11,7 @@ See [CLAUDE.md](CLAUDE.md) for implementation instructions and phase plan.
 
 ```bash
 pip install -e ".[dev]"
-pip install stable-baselines3 gymnasium
+pip install stable-baselines3 gymnasium optuna
 pytest tests/
 ```
 
@@ -33,28 +33,38 @@ This downloads 25 DOW30 constituents, adds technical indicators (MACD, RSI, CCI,
 
 ## Running the Backtest
 
-### Walk-Forward Validation
+### Walk-Forward Validation (Official Evaluation)
 ```bash
-python3 -m src.run_walk_forward
+# With default PPO hyperparameters
+python3 -m src.run_walk_forward --cycle 7
+
+# With Optuna-optimized hyperparameters
+python3 -m src.run_walk_forward --cycle 7 --use-optimized-params
 ```
 
-Runs PPO training and evaluation using 10-fold walk-forward validation with transaction costs. Outputs `reports/walk_forward_summary.csv` with per-window metrics including Sharpe, Sortino, and Calmar ratios.
+Runs PPO training and evaluation using 9-fold walk-forward validation with transaction costs. Includes Buy & Hold and Equal Weight baseline comparison. Outputs:
+- `reports/walk_forward_summary.csv` — per-window metrics
+- `reports/cycle_7/metrics.json` — ARF-standard aggregated metrics
+- `reports/cycle_7/performance_comparison.md` — PPO vs baseline comparison table
+- `reports/cycle_7/sharpe_distribution.png` — OOS Sharpe distribution histogram
+
+### Hyperparameter Optimization (Cycle 7)
+```bash
+python3 -m scripts.tune_hyperparameters --n-trials 100
+```
+
+Uses Optuna (TPE sampler) to search for optimal PPO hyperparameters by maximizing OOS Sharpe ratio on the first walk-forward fold. Searches over `learning_rate`, `n_steps`, `gamma`, and `ent_coef`.
 
 ### Cost Analysis (Cycle 5)
 ```bash
 python3 -m src.run_cost_analysis
 ```
 
-Trains a single PPO agent and evaluates it under two cost configurations (gross: 0% costs, net: 0.1% fee + 0.05% slippage) to measure the impact of transaction costs on performance. Outputs `reports/cycle_5/cost_comparison.json`.
+Evaluates impact of transaction costs on performance.
 
-### Hyperparameter Optimization (Cycle 7)
-```bash
-python -m scripts.tune_hyperparameters --n-trials 100
-```
+## Key Results (Cycle 7)
 
-Uses Optuna (TPE sampler) to search for optimal PPO hyperparameters by maximizing OOS Sharpe ratio on the first walk-forward fold. Searches over `learning_rate`, `n_steps`, `gamma`, and `ent_coef`.
-
-### Key Results (Cycle 7 - Hyperparameter Optimization)
+### Optimized Hyperparameters
 
 | Parameter | Default | Optimized |
 |-----------|---------|-----------|
@@ -63,7 +73,13 @@ Uses Optuna (TPE sampler) to search for optimal PPO hyperparameters by maximizin
 | gamma | 0.99 | 0.999 |
 | ent_coef | 0.0 | 0.01 |
 
-Best trial Sharpe: 1.81 (25K steps), full eval Sharpe: 0.61 (100K steps).
+### Walk-Forward Performance (9 windows, optimized params)
+
+| Metric | PPO (Optimized) | Buy & Hold | Equal Weight |
+|--------|----------------|------------|--------------|
+| Avg Sharpe | 1.126 | 1.385 | 1.142 |
+| Avg Return | 12.4% | 20.1% | 15.3% |
+| Positive Windows | 9/9 | 9/9 | 9/9 |
 
 ## Reports
 
@@ -73,3 +89,5 @@ Each cycle produces:
 - `reports/walk_forward_summary.csv` — Walk-forward validation results
 - `reports/cycle_7/best_params.json` — Optimized PPO hyperparameters
 - `reports/cycle_7/study.db` — Optuna study database
+- `reports/cycle_7/performance_comparison.md` — PPO vs baseline strategies
+- `reports/cycle_7/sharpe_distribution.png` — Sharpe distribution analysis

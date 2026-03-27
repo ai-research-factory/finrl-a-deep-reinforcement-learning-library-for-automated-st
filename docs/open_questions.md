@@ -24,8 +24,9 @@
 - Cost impact on Sharpe ratio is modest (~3% reduction) partly because the PPO agent's trading frequency is moderate (~2700 trades over the test period). Higher-frequency strategies would show larger cost impact.
 
 ## Hyperparameter Optimization (Cycle 7)
-- The Optuna search used only the first walk-forward fold for optimization. This is a deliberate choice to prevent overfitting to all folds, but means the optimal params may not generalize equally to all market regimes. Phase 8 will evaluate this.
-- Significant gap between 25K-step tuning Sharpe (1.81) and 100K-step full evaluation Sharpe (0.61). Possible causes: (a) longer training causes mild overfitting to training data, (b) 25K steps captures noisier estimates, (c) the relationship between tuning and full-training performance is nonlinear.
-- The optimized learning rate (4.46e-5) is ~7x lower than the SB3 default (3e-4). This is a significant deviation from typical defaults and should be validated on multiple folds.
-- The `risk_penalty_coef=0.05` reward function modification (non-paper) was kept during optimization. The review recommends first establishing a baseline with the paper's original reward (pure portfolio value change), then comparing. This is deferred to a future cycle.
-- Baseline strategies (Buy & Hold, Equal Weight) have been implemented in `src/baselines.py` but not yet evaluated on the same walk-forward framework. This comparison is needed for Phase 8.
+- The Optuna search used only the first walk-forward fold for optimization. This is a deliberate choice to prevent overfitting to all folds, but means the optimal params may not generalize equally to all market regimes.
+- Significant gap between 25K-step tuning Sharpe (1.81) and full 9-window walk-forward average Sharpe (1.13). The single-fold tuning result was optimistic; multi-window evaluation provides a more realistic estimate.
+- The optimized learning rate (4.46e-5) is ~7x lower than the SB3 default (3e-4). Validated across 9 walk-forward windows — all achieved positive Sharpe, confirming the parameter works across market regimes.
+- PPO (avg Sharpe 1.13) underperforms Buy & Hold (1.39) but matches Equal Weight (1.14) on average. This is consistent with a generally bullish market period (2011-2020) where passive strategies have a structural advantage.
+- The `risk_penalty_coef=0.05` reward function modification (non-paper) was kept during optimization. The review recommends establishing a baseline with the paper's original reward (pure portfolio value change) for comparison. This is deferred to a future cycle.
+- High Sharpe standard deviation (0.76) across windows indicates substantial regime dependence. The agent performs well in trending markets but struggles during turbulent periods (COVID crash in window 9: Sharpe 0.24, max DD -44.9%).
