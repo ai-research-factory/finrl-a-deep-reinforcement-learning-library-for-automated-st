@@ -22,3 +22,10 @@
 - The risk-adjusted reward function uses a fixed `risk_penalty_coef=0.05`. The paper does not specify this parameter; it was chosen empirically. Future cycles could tune this via hyperparameter optimization.
 - The `reward_scaling=1e-4` normalizes rewards for stable PPO training. This is an implementation detail not discussed in the paper.
 - Cost impact on Sharpe ratio is modest (~3% reduction) partly because the PPO agent's trading frequency is moderate (~2700 trades over the test period). Higher-frequency strategies would show larger cost impact.
+
+## Hyperparameter Optimization (Cycle 7)
+- The Optuna search used only the first walk-forward fold for optimization. This is a deliberate choice to prevent overfitting to all folds, but means the optimal params may not generalize equally to all market regimes. Phase 8 will evaluate this.
+- Significant gap between 25K-step tuning Sharpe (1.81) and 100K-step full evaluation Sharpe (0.61). Possible causes: (a) longer training causes mild overfitting to training data, (b) 25K steps captures noisier estimates, (c) the relationship between tuning and full-training performance is nonlinear.
+- The optimized learning rate (4.46e-5) is ~7x lower than the SB3 default (3e-4). This is a significant deviation from typical defaults and should be validated on multiple folds.
+- The `risk_penalty_coef=0.05` reward function modification (non-paper) was kept during optimization. The review recommends first establishing a baseline with the paper's original reward (pure portfolio value change), then comparing. This is deferred to a future cycle.
+- Baseline strategies (Buy & Hold, Equal Weight) have been implemented in `src/baselines.py` but not yet evaluated on the same walk-forward framework. This comparison is needed for Phase 8.

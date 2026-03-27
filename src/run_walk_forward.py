@@ -1,7 +1,7 @@
 """Walk-forward backtest: train PPO on DOW30 data with rolling windows.
 
 Usage:
-    python -m src.run_single_backtest
+    python -m src.run_walk_forward
 """
 
 import json

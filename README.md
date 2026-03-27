@@ -35,7 +35,7 @@ This downloads 25 DOW30 constituents, adds technical indicators (MACD, RSI, CCI,
 
 ### Walk-Forward Validation
 ```bash
-python3 -m src.run_single_backtest
+python3 -m src.run_walk_forward
 ```
 
 Runs PPO training and evaluation using 10-fold walk-forward validation with transaction costs. Outputs `reports/walk_forward_summary.csv` with per-window metrics including Sharpe, Sortino, and Calmar ratios.
@@ -47,14 +47,23 @@ python3 -m src.run_cost_analysis
 
 Trains a single PPO agent and evaluates it under two cost configurations (gross: 0% costs, net: 0.1% fee + 0.05% slippage) to measure the impact of transaction costs on performance. Outputs `reports/cycle_5/cost_comparison.json`.
 
-### Key Results (Cycle 5 - Cost Analysis)
+### Hyperparameter Optimization (Cycle 7)
+```bash
+python -m scripts.tune_hyperparameters --n-trials 100
+```
 
-| Metric | Gross | Net (with costs) |
-|--------|-------|------------------|
-| Sharpe Ratio | 0.51 | 0.49 |
-| Annual Return | 12.06% | 11.49% |
-| Max Drawdown | -43.34% | -43.44% |
-| Transaction Costs | $0 | $6,989 |
+Uses Optuna (TPE sampler) to search for optimal PPO hyperparameters by maximizing OOS Sharpe ratio on the first walk-forward fold. Searches over `learning_rate`, `n_steps`, `gamma`, and `ent_coef`.
+
+### Key Results (Cycle 7 - Hyperparameter Optimization)
+
+| Parameter | Default | Optimized |
+|-----------|---------|-----------|
+| learning_rate | 3e-4 | 4.46e-5 |
+| n_steps | 2048 | 4096 |
+| gamma | 0.99 | 0.999 |
+| ent_coef | 0.0 | 0.01 |
+
+Best trial Sharpe: 1.81 (25K steps), full eval Sharpe: 0.61 (100K steps).
 
 ## Reports
 
@@ -62,4 +71,5 @@ Each cycle produces:
 - `reports/cycle_N/metrics.json` — Structured metrics
 - `reports/cycle_N/technical_findings.md` — Technical summary
 - `reports/walk_forward_summary.csv` — Walk-forward validation results
-- `reports/cycle_5/cost_comparison.json` — Gross vs. net performance comparison
+- `reports/cycle_7/best_params.json` — Optimized PPO hyperparameters
+- `reports/cycle_7/study.db` — Optuna study database

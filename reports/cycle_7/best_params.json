@@ -1,0 +1,8 @@
+{
+  "learning_rate": 4.458590273147541e-05,
+  "n_steps": 4096,
+  "gamma": 0.999,
+  "ent_coef": 0.01,
+  "best_sharpe": 1.8148,
+  "n_trials": 100
+}

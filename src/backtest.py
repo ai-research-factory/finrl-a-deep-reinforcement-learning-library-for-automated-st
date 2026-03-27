@@ -164,6 +164,8 @@ def generate_metrics_json(
 
     net_sharpes = [r.net_sharpe for r in results]
     positive_windows = sum(1 for s in net_sharpes if s > 0)
+    avg_oos_sharpe = round(float(np.mean(net_sharpes)), 4)
+    std_oos_sharpe = round(float(np.std(net_sharpes)), 4) if len(net_sharpes) > 1 else 0.0
 
     return {
         "sharpeRatio": round(float(np.mean([r.gross_sharpe for r in results])), 4),
@@ -174,12 +176,13 @@ def generate_metrics_json(
         "transactionCosts": {
             "feeBps": config.fee_bps,
             "slippageBps": config.slippage_bps,
-            "netSharpe": round(float(np.mean(net_sharpes)), 4),
+            "netSharpe": avg_oos_sharpe,
         },
         "walkForward": {
             "windows": len(results),
             "positiveWindows": positive_windows,
-            "avgOosSharpe": round(float(np.mean(net_sharpes)), 4),
+            "avgOosSharpe": avg_oos_sharpe,
+            "stdOosSharpe": std_oos_sharpe,
         },
         "customMetrics": custom_metrics or {},
     }
