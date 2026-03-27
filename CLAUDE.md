@@ -7,7 +7,7 @@ proj_592c901a
 ReinforcementLearning
 
 ## Current Cycle
-2
+3
 
 ## Objective
 Implement, validate, and iteratively improve the paper's approach with production-quality standards.
@@ -15,34 +15,22 @@ Implement, validate, and iteratively improve the paper's approach with productio
 
 ## Design Brief
 ### Problem
-Applying deep reinforcement learning (DRL) to quantitative finance is challenging due to the complexities of financial markets, such as low signal-to-noise ratios and non-stationarity. Furthermore, there is a lack of standardized frameworks that bridge the gap between DRL research and practical financial applications. This makes it difficult for researchers and practitioners to develop, test, and deploy DRL-based trading strategies in a robust and reproducible manner.
-
-This paper introduces FinRL, an open-source Python library designed to address these challenges. It provides a complete, end-to-end framework that includes simulated stock trading environments compatible with OpenAI Gym, implementations of various state-of-the-art DRL algorithms, and comprehensive backtesting modules. The goal of FinRL is to lower the barrier to entry for using DRL in finance, enabling users to streamline the development, training, and evaluation of automated trading strategies.
+Deep Reinforcement Learning (DRL) presents a promising avenue for developing adaptive, automated trading strategies. However, its application in quantitative finance is challenging due to the need for specialized, realistic trading environments, robust backtesting frameworks, and accessible DRL algorithm implementations. Existing tools often lack a comprehensive, end-to-end structure, forcing practitioners to build significant infrastructure from scratch. This paper introduces FinRL, an open-source Python library designed to bridge this gap. FinRL provides a full-stack framework that includes modules for data fetching and processing, a simulated stock trading environment compatible with standard RL libraries, a suite of pre-implemented DRL agents, and a rigorous backtesting engine. The goal is to democratize the use of DRL in finance, enabling faster development, evaluation, and deployment of automated trading strategies.
 
 ### Datasets
-{"name":"Dow Jones Industrial Average (DJIA) Components","source":"yfinance API","method":"yfinance.download(tickers, start='2009-01-01', end='2021-01-01')","tickers":["AXP","AMGN","AAPL","BA","CAT","CSCO","CVX","GS","HD","HON","IBM","INTC","JNJ","KO","JPM","MCD","MMM","MRK","MSFT","NKE","PG","TRV","UNH","CRM","VZ","V","WBA","WMT","DIS","DOW"]}
+{"name":"Dow Jones 30 Constituents (DOW)","source":"yfinance API","details":"Daily OHLCV data for the 30 stocks in the Dow Jones Industrial Average. The paper uses the period from 2009-01-01 to 2020-09-30. Tickers can be sourced from a standard list of DOW 30 components for that era."}
 
 ### Targets
-Maximize the risk-adjusted return of a trading portfolio. The primary optimization objective for the reinforcement learning agent is the reward function, which is defined as the change in portfolio value at each step. The ultimate evaluation metric is the Sharpe Ratio on out-of-sample data.
+The primary objective is to train a DRL agent to learn a trading policy that maximizes the risk-adjusted return, as measured by the Sharpe Ratio, on a portfolio of stocks.
 
 ### Model
-FinRL is not a single model but a framework. Its core components are:
-1.  **Stock Trading Environment**: An OpenAI Gym-compatible environment that simulates the stock market. The state space includes market information (prices, technical indicators) and portfolio information (stock holdings, cash balance). The action space represents the trading decision (buy/sell/hold). The reward is the change in portfolio value.
-2.  **DRL Agents**: The framework integrates with the `stable-baselines3` library to provide access to common DRL algorithms such as A2C, PPO, and DDPG. These agents learn a policy that maps states to actions to maximize the cumulative reward.
-3.  **Data Processor**: A module for fetching data from APIs like `yfinance` and preprocessing it by adding technical indicators.
+FinRL employs a three-layer architecture. The first layer is a Data Processor for fetching financial data and engineering features (e.g., technical indicators). The second layer is a custom trading environment, modeled after OpenAI Gym, which simulates the market. The state space in this environment includes stock prices, technical indicators, and current portfolio holdings. The action space represents the number of shares to buy or sell for each stock. The reward function is defined as the change in portfolio value at each step. The third layer consists of DRL agents (e.g., PPO, A2C, DDPG) from libraries like Stable Baselines3, which learn a policy by interacting with the environment.
 
 ### Training
-The paper uses a chronological train-validation-test split. For example, data from 2009-01-01 to 2018-12-31 is used for training, 2019-01-01 to 2020-12-31 for validation (e.g., hyperparameter tuning), and 2021-01-01 onwards for out-of-sample testing. The paper also advocates for a walk-forward validation approach for more robust evaluation, where the model is periodically retrained as new data becomes available.
+The historical data is split chronologically into a training set and a testing set. The paper uses 2009-01-01 to 2018-12-31 for training and 2019-01-01 to 2020-09-30 for out-of-sample testing. The DRL agent is trained on the training data for a specified number of timesteps. For more robust evaluation, a walk-forward validation approach is recommended, where the model is periodically retrained on newer data and tested on the subsequent period.
 
 ### Evaluation
-The primary evaluation is conducted through backtesting on an out-of-sample test set. Key performance metrics include:
-- Cumulative Return
-- Annualized Return
-- Annualized Volatility
-- Sharpe Ratio
-- Max Drawdown
-- Calmar Ratio
-The performance of the DRL agent is compared against baseline strategies, primarily a market-neutral benchmark (e.g., holding the DJIA index) and a simple buy-and-hold strategy for the traded assets.
+The trained agent's performance is evaluated on the out-of-sample test set. Key performance metrics include Annualized Return, Annualized Volatility, Sharpe Ratio, and Maximum Drawdown. The agent's performance is benchmarked against traditional strategies like a passive Buy-and-Hold strategy on the same portfolio and the performance of the Dow Jones Industrial Average (DJIA) index.
 
 
 ## データ取得方法（共通データ基盤）
@@ -79,49 +67,103 @@ df = df.set_index("timestamp")
 
 
 
-## ★ 今回のタスク (Cycle 2)
+## ★ 今回のタスク (Cycle 3)
 
 
-### Phase 2: 実データパイプラインの構築
+### Phase 3: 統合とシングルバックテスト
 
-**ゴール**: yfinanceから実際の株価データを取得し、前処理して保存するパイプラインを構築する。
+**ゴール**: 実データ、環境、エージェントを統合し、単一の学習・テスト期間でバックテストを実行する。
 
 **具体的な作業指示**:
-1. `src/data/processor.py`に`DataProcessor`クラスを作成します。
-2. `DataProcessor`に`download_data`メソッドを追加します。このメソッドはティッカーリスト、開始日、終了日を引数に取り、`yfinance.download`を使用してデータを取得し、`data/raw/{ticker}.csv`として保存します。ティッカー`['AAPL']`、期間`2009-01-01`から`2021-12-31`でテストしてください。
-3. `DataProcessor`に`add_technical_indicators`メソッドを追加します。このメソッドは価格データフレームを受け取り、`ta`ライブラリを使用してMACD、RSI (14日)、CCI (14日)、ADX (14日)を計算し、列として追加します。
-4. `src/preprocess.py`スクリプトを作成します。このスクリプトは`DataProcessor`を使い、`AAPL`のデータをダウンロードし、テクニカル指標を追加して、`data/processed/AAPL_processed.csv`に保存します。NaN値は前方フィル(`ffill`)で処理してください。
+1. `src/environment.py`の`StockTradingEnv`を修正し、コンストラクタでデータフレームを受け取れるようにします。
+2. `scripts/run_single_backtest.py`を作成します。このスクリプトは`data/processed/dow30_daily.csv`を読み込み、学習期間（2009-01-01〜2018-12-31）とテスト期間（2019-01-01〜2020-09-30）に分割します。
+3. 学習データで`StockTradingEnv`を初期化し、PPOエージェントを100,000タイムステップ学習させます。
+4. 学習済みエージェントを使い、テストデータで初期化した環境でバックテストを実行します。各ステップのポートフォリオ価値を記録します。
+5. 結果として得られたポートフォリオ価値の時系列データを`reports/cycle_3/portfolio_value.csv`に保存し、その推移を`reports/cycle_3/portfolio_value.png`としてプロットします。
 
 **期待される出力ファイル**:
-- src/data/processor.py
-- src/preprocess.py
-- data/processed/AAPL_processed.csv
+- reports/cycle_3/portfolio_value.csv
+- reports/cycle_3/portfolio_value.png
 
 **受入基準 (これを全て満たすまで完了としない)**:
-- 基準1: `python src/preprocess.py`が成功し、`data/processed/AAPL_processed.csv`が生成される。
-- 基準2: 生成されたCSVファイルに`macd`, `rsi`, `cci`, `adx`の列が含まれている。
+- `portfolio_value.csv`にテスト期間中の日々のポートフォリオ価値が記録されている。
+- `portfolio_value.png`にポートフォリオ価値の推移が描画されている。
 
 
 
 
 
+## スコア推移
+Cycle 2: 45%
 
 
 
+## 前回の結果
+# Cycle 2: Technical Findings — Real Data Pipeline
+
+## Implementation
+
+### DataProcessor (`src/data/processor.py`)
+- `download_data(tickers, start_date, end_date)`: Fetches OHLCV data from the ARF Data API (`period=max`, filtered to requested date range). Saves raw CSV to `data/raw/{ticker}.csv`.
+- `add_technical_indicators(df)`: Adds four technical indicators using the `ta` library:
+  - **MACD** (default 12/26/9 windows)
+  - **RSI** (14-day)
+  - **CCI** (14-day)
+  - **ADX** (14-day)
+
+### Preprocess Script (`src/preprocess.py`)
+Orchestrates the full pipeline: download AAPL data (2009-01-01 to 2021-12-31), add indicators, forward-fill NaN values, drop remaining leading NaN rows, save to `data/processed/AAPL_processed.csv`.
+
+## Results
+
+| Metric | Value |
+|--------|-------|
+| Rows (processed) | 3,248 |
+| Date range | 2009-02-09 to 2021-12-31 |
+| Columns | open, high, low, close, volume, macd, rsi, cci, adx |
+| NaN values | 0 |
+
+- 25 leading rows were dropped after forward-fill (from initial indicator warm-up windows), resulting in an effective start date of 2009-02-09 instead of 2009-01-02.
+- The `ta` library's ADX indicator requires ~14 days of warm-up, which accounts for most of the dropped rows.
+
+## Observations
+
+- ARF Data API provides `period=max` option which covers the full history needed (2009–2021).
+- Data quality appears good with no missing OHLCV values in the raw download.
+- Forward-fill strategy is appropriate since NaN values only appear in the initial rows where indicators lack sufficient history.
+
+## Dependencies Added
+- `ta` — Technical analysis library for computing indicators
+- `requests` — HTTP client for ARF Data API calls
+
+
+
+
+## レビューからのフィードバック
+### レビュー改善指示
+1. [object Object]
+2. [object Object]
+3. [object Object]
+### マネージャー指示 (次のアクション)
+1. 【最優先】`src/environment/stock_trading_env.py` を作成し、OpenAI Gymの`gym.Env`を継承した取引環境を実装する。`step`, `reset`メソッドを定義し、状態空間（state space）、行動空間（action space）、報酬（reward）の設計を論文に沿って行う。まずは単一銘柄（AAPL）で動作する基本環境を完成させること。
+2. 【重要】`src/agents/a2c_agent.py` を作成し、Stable-Baselines3ライブラリを用いて論文で言及されているベースラインの一つであるA2Cエージェントを実装する。`train`と`predict`メソッドを定義し、`src/environment/stock_trading_env.py`で作成した環境と連携して学習と推論が実行できることを確認する。
+3. 【推奨】`src/data/processor.py`の`DataProcessor`クラスを修正し、単一銘柄だけでなく、複数のティッカーシンボル（DJIA構成銘柄リスト）を引数として受け取り、一括でデータ処理できるように拡張する。同時に、論文で言及されているVIXとturbulence indexを計算し、特徴量として追加するロジックを実装する。
 
 
 ## 全体Phase計画 (参考)
 
-✓ Phase 1: コア環境とエージェントの実装 — 合成データ上で動作する、単一銘柄の取引環境と基本的なA2Cエージェントを実装する。
-→ Phase 2: 実データパイプラインの構築 — yfinanceから実際の株価データを取得し、前処理して保存するパイプラインを構築する。
-  Phase 3: バックテストと評価フレームワークの実装 — 学習済みエージェントのパフォーマンスを評価するためのバックテストエンジンと評価指標計算を実装する。
-  Phase 4: 取引コストの導入 — 取引環境とバックテストに手数料とスリッページを組み込み、コストの影響を評価する。
-  Phase 5: 複数アルゴリズムの比較 — 論文で言及されている主要なDRLアルゴリズム（A2C, PPO, DDPG）を実装し、性能を比較する。
-  Phase 6: 複数銘柄ポートフォリオ環境への拡張 — 複数の株式を同時に取引できるポートフォリオ管理環境を実装する。
-  Phase 7: ハイパーパラメータ最適化 — Optunaを用いてPPOエージェントの主要なハイパーパラメータを最適化する。
-  Phase 8: ウォークフォワード検証の実装 — より現実的な評価のために、ウォークフォワード検証フレームワークを実装し実行する。
-  Phase 9: 総合レポートと可視化 — 全フェーズの結果をまとめた総合的なテクニカルレポートを生成する。
-  Phase 10: エグゼクティブサマリーと仕上げ — 非技術者向けの要約を作成し、コードベースの品質を向上させる。
+✓ Phase 1: コア環境とエージェントの実装 — 合成データ上で動作する、基本的な株式取引環境とPPOエージェントを実装する。
+✓ Phase 2: 実データパイプラインの構築 — yfinanceからDOW30の株価データを取得し、テクニカル指標を追加して前処理を行うパイプラインを構築する。
+→ Phase 3: 統合とシングルバックテスト — 実データ、環境、エージェントを統合し、単一の学習・テスト期間でバックテストを実行する。
+  Phase 4: 評価指標とベースライン比較 — 標準的な財務評価指標を計算するモジュールを実装し、エージェントの性能をベースライン戦略と比較する。
+  Phase 5: 取引コストモデルの導入 — 取引環境に手数料とスリッページをモデル化し、コストがパフォーマンスに与える影響を評価する。
+  Phase 6: ウォークフォワード検証の実装 — 単一の学習・テスト分割ではなく、より頑健なウォークフォワード検証フレームワークを実装する。
+  Phase 7: ハイパーパラメータ最適化 — Optunaを用いてPPOエージェントの主要なハイパーパラメータを体系的に探索し、最適な組み合わせを見つける。
+  Phase 8: 最適化パラメータでの再評価 — 見つかった最適なハイパーパラメータを使用して、完全なウォークフォワード検証を再実行し、パフォーマンスの向上を確認する。
+  Phase 9: 代替DRLアルゴリズムとの比較 — 別のDRLアルゴリズム（A2C）を実装し、PPOとの性能をウォークフォワード検証で比較する。
+  Phase 10: 状態空間の拡張と影響分析 — マクロ経済指標を状態空間に追加し、それがエージェントのパフォーマンスに与える影響を分析する。
+  Phase 11: 最終レポートと可視化 — 全フェーズの結果を統合し、包括的なテクニカルレポートと主要な可視化を生成する。
+  Phase 12: コードの仕上げとエグゼクティブサマリー — プロジェクトのコード品質を向上させ、非技術者向けの要約を作成する。
 
 
 ## 評価原則
@@ -170,8 +212,8 @@ df = df.set_index("timestamp")
 
 ## 出力ファイル
 以下のファイルを保存してから完了すること:
-- `reports/cycle_2/metrics.json` — 下記スキーマに従う（必須）
-- `reports/cycle_2/technical_findings.md` — 実装内容、結果、観察事項
+- `reports/cycle_3/metrics.json` — 下記スキーマに従う（必須）
+- `reports/cycle_3/technical_findings.md` — 実装内容、結果、観察事項
 
 ### metrics.json 必須スキーマ
 ```json
