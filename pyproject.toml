@@ -3,4 +3,4 @@ name = "finrl-a-deep-reinforcement-learning-library-for-automated-st"
 version = "0.1.0"
 description = "FinRL: A Deep Reinforcement Learning Library for Automated Stock Trading in Quantitative Finance"
 requires-python = ">=3.10"
-dependencies = ["numpy", "pandas", "scikit-learn", "torch", "matplotlib", "tqdm", "ta", "requests"]
+dependencies = ["numpy", "pandas", "scikit-learn", "torch", "matplotlib", "tqdm", "ta", "requests", "stable-baselines3", "gymnasium"]

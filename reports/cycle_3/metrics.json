@@ -1,0 +1,27 @@
+{
+  "sharpeRatio": 0.2599,
+  "annualReturn": 0.0323,
+  "maxDrawdown": -0.4039,
+  "hitRate": 0.5523,
+  "totalTrades": 3366,
+  "transactionCosts": {
+    "feeBps": 10,
+    "slippageBps": 5,
+    "netSharpe": 0.2599
+  },
+  "walkForward": {
+    "windows": 0,
+    "positiveWindows": 0,
+    "avgOosSharpe": 0.0
+  },
+  "customMetrics": {
+    "phase": "single_backtest",
+    "totalReturn": 0.057,
+    "finalPortfolioValue": 1057037.96,
+    "initialAmount": 1000000.0,
+    "trainPeriod": "2009-01-01 to 2018-12-31",
+    "testPeriod": "2019-01-01 to 2020-09-30",
+    "totalTimesteps": 100000,
+    "stockDim": 25
+  }
+}

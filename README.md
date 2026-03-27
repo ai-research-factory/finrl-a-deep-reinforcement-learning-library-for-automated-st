@@ -11,28 +11,52 @@ See [CLAUDE.md](CLAUDE.md) for implementation instructions and phase plan.
 
 ```bash
 pip install -e ".[dev]"
+pip install stable-baselines3 gymnasium
 pytest tests/
 ```
 
-## Data Pipeline (Cycle 2)
+## Data Pipeline
 
 Data is fetched from the ARF Data API at runtime. Do not commit data files.
 
-To download and preprocess AAPL data:
+### Single ticker (AAPL)
+```bash
+python3 -m src.preprocess
+```
+
+### DOW30 multi-ticker
+```bash
+python3 -m src.preprocess --dow30
+```
+
+This downloads 25 DOW30 constituents, adds technical indicators (MACD, RSI, CCI, ADX), aligns dates, and saves to `data/processed/dow30_daily.csv`.
+
+## Running the Backtest (Cycle 3)
 
 ```bash
-python3 src/preprocess.py
+python3 -m src.run_single_backtest
 ```
 
 This will:
-1. Download OHLCV data from the ARF Data API for AAPL (2009-01-01 to 2021-12-31)
-2. Add technical indicators (MACD, RSI, CCI, ADX)
-3. Forward-fill NaN values and save to `data/processed/AAPL_processed.csv`
+1. Load `data/processed/dow30_daily.csv` (downloads automatically if missing)
+2. Split into training (2009–2018) and test (2019–2020-09) periods
+3. Train a PPO agent for 100,000 timesteps
+4. Run backtest on the test period
+5. Save results to `reports/cycle_3/`
 
-The `DataProcessor` class in `src/data/processor.py` can be reused for other tickers.
+### Key Results (Cycle 3)
+
+| Metric | Value |
+|--------|-------|
+| Sharpe Ratio | 0.26 |
+| Annualized Return | 3.23% |
+| Max Drawdown | -40.39% |
+| Total Return (test period) | 5.70% |
 
 ## Reports
 
 Each cycle produces:
 - `reports/cycle_N/metrics.json` — Structured metrics
 - `reports/cycle_N/technical_findings.md` — Technical summary
+- `reports/cycle_3/portfolio_value.csv` — Daily portfolio values
+- `reports/cycle_3/portfolio_value.png` — Portfolio value chart
