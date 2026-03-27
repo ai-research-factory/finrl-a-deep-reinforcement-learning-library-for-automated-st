@@ -14,9 +14,22 @@ pip install -e ".[dev]"
 pytest tests/
 ```
 
-## Data
+## Data Pipeline (Cycle 2)
 
 Data is fetched from the ARF Data API at runtime. Do not commit data files.
+
+To download and preprocess AAPL data:
+
+```bash
+python3 src/preprocess.py
+```
+
+This will:
+1. Download OHLCV data from the ARF Data API for AAPL (2009-01-01 to 2021-12-31)
+2. Add technical indicators (MACD, RSI, CCI, ADX)
+3. Forward-fill NaN values and save to `data/processed/AAPL_processed.csv`
+
+The `DataProcessor` class in `src/data/processor.py` can be reused for other tickers.
 
 ## Reports
 
